@@ -131,7 +131,7 @@ export default function ExcelPreview({onUploaded}:{onUploaded?:()=>void}) {
   return <section style={panel}>
     <h2>Sales Excel Upload — All Rows Preserved</h2>
     <p>City, Pincode, Order, Area અથવા બીજા Optional Columns ખાલી હોય તો પણ Row Save થશે. Excel ના બધા Original Columns પણ સાચવાશે.</p>
-    <label style={{display:"inline-flex",alignItems:"center",gap:8,padding:12,border:"1px dashed #7048e8",borderRadius:9,cursor:"pointer"}}><FileSpreadsheet size={20}/>{busy?"Reading Excel...":"Choose Excel File (.xlsx, .xls)"}<input type="file" accept=".xlsx,.xls" disabled={busy||saving} onChange={load} style={{display:"none"}/></label>
+    <label style={{display:"inline-flex",alignItems:"center",gap:8,padding:12,border:"1px dashed #7048e8",borderRadius:9,cursor:"pointer"}}><FileSpreadsheet size={20}/>{busy?"Reading Excel...":"Choose Excel File (.xlsx, .xls)"}<input type="file" accept=".xlsx,.xls" disabled={busy||saving} onChange={load} style={{display:"none"}}/></label>
     {message&&<p role="alert" style={{color:"#b42318"}}>{message}</p>}
     {success&&<p role="status" style={{color:"#177245"}}><CheckCircle2 size={17}/> {success}</p>}
     {data&&<>
