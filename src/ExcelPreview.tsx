@@ -57,6 +57,7 @@ export default function ExcelPreview({onUploaded}:{onUploaded?:()=>void}) {
   const [data,setData] = useState<Parsed|null>(null);
   const [busy,setBusy] = useState(false);
   const [saving,setSaving] = useState(false);
+  const [progress,setProgress] = useState(0);
   const [message,setMessage] = useState("");
   const [success,setSuccess] = useState("");
   async function load(event:ChangeEvent<HTMLInputElement>) {
@@ -114,14 +115,28 @@ export default function ExcelPreview({onUploaded}:{onUploaded?:()=>void}) {
   async function save() {
     if (!data || !supabase || saving) return;
     if (!data.total) {setMessage("Excel માં Data Rows નથી.");return;}
+    if (!data.headers.some(h=>clean(h)==="taxable")) {setMessage("Excel માં Taxable Column નથી.");return;}
     if (!window.confirm(`${data.total} Rows Supabase માં Save કરવી છે? ખાલી Optional Columns હોવા છતાં બધી Rows Save થશે.`)) return;
     setSaving(true);setMessage("");setSuccess("");
     try {
-      const {data:result,error}=await supabase.rpc("upload_sales_excel",{
-        p_file_name:data.file,p_file_hash:data.hash,p_rows:data.records
+      const batchSize=250;
+      setProgress(0);
+      for (let start=0;start<data.total;start+=batchSize) {
+        const batch=data.records.slice(start,start+batchSize);
+        const {data:staged,error}=await supabase.rpc("stage_sales_batch",{
+          p_file_hash:data.hash,p_start:start,p_rows:batch
+        });
+        if (error) throw new Error(`Batch ${Math.floor(start/batchSize)+1}: ${error.message}`);
+        if (Number(staged?.accepted_rows)!==batch.length) throw new Error(`Batch ${Math.floor(start/batchSize)+1} count mismatch`);
+        setProgress(Math.min(start+batch.length,data.total));
+      }
+      const {data:result,error}=await supabase.rpc("finalize_sales_batches",{
+        p_file_name:data.file,p_file_hash:data.hash,p_total:data.total
       });
       if (error) throw error;
-      setSuccess(`${result?.inserted_rows ?? data.total} Rows સફળતાપૂર્વક Save થઈ. કોઈ Row Skip થઈ નથી.`);
+      if (Number(result?.inserted_rows)!==data.total) throw new Error("Database row count mismatch");
+      // Verify through authenticated RPC rather than an RLS-limited table count.
+      setSuccess(`${result.inserted_rows} Rows Database માં Save થઈ. Upload ID: ${result.upload_id}`);
       setData(null);
       onUploaded?.();
     } catch(e) {setMessage(e instanceof Error?e.message:"Upload નિષ્ફળ થયું.");}
@@ -133,6 +148,7 @@ export default function ExcelPreview({onUploaded}:{onUploaded?:()=>void}) {
     <label style={{display:"inline-flex",alignItems:"center",gap:8,padding:12,border:"1px dashed #7048e8",borderRadius:9,cursor:"pointer"}}><FileSpreadsheet size={20}/>{busy?"Reading Excel...":"Choose Excel File (.xlsx, .xls)"}<input type="file" accept=".xlsx,.xls" disabled={busy||saving} onChange={load} style={{display:"none"}}/></label>
     {message&&<p role="alert" style={{color:"#b42318"}}>{message}</p>}
     {success&&<p role="status" style={{color:"#177245"}}><CheckCircle2 size={17}/> {success}</p>}
+    {saving&&data&&<p role="status"><strong>Upload Progress: {fmt(progress)} / {fmt(data.total)} Rows</strong>{progress===data.total?" — Finalizing Database...":""}</p>}
     {data&&<>
       <p><strong>File:</strong> {data.file} | <strong>Sheet:</strong> {data.sheet}</p>
       <div style={{display:"flex",flexWrap:"wrap",gap:14}}><strong>Rows: {fmt(data.total)}</strong><strong>Qty: {fmt(data.qty)}</strong><strong>Taxable Sales: ₹{fmt(data.sales)}</strong></div>
