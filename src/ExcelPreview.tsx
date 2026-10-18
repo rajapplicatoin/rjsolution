@@ -7,7 +7,7 @@ type Cell = string | number | boolean | null | undefined;
 type ExcelRow = Record<string, Cell>;
 type UploadRow = Record<string, unknown>;
 type PreviewRow = { row: number; date: string; party: string; code: string; qty: string; amount: string; warnings: string[] };
-type Parsed = { file: string; sheet: string; total: number; qty: number; sales: number; listValue: number; headers: string[]; warnings: {row:number;message:string}[]; preview: PreviewRow[]; records: UploadRow[]; hash: string };
+type Parsed = { file: string; sheet: string; total: number; qty: number; sales: number; headers: string[]; warnings: {row:number;message:string}[]; preview: PreviewRow[]; records: UploadRow[]; hash: string };
 
 const aliases: Record<string, string[]> = {
   date: ["Dosc Date", "Doc Date", "Sale Date", "Sales Date", "Date"],
@@ -22,8 +22,8 @@ const aliases: Record<string, string[]> = {
   city: ["City", "City Name"],
   pin: ["Pin Code", "Pincode", "PIN", "Postal Code", "Zip Code"],
   qty: ["Qty", "Quantity"],
-  amount: ["Amt", "Sales Amount", "Amount", "Net Amount"],
-  listValue: ["List Value", "List value sales", "ListValue"]
+  amount: ["Taxable", "Taxable Amount", "Taxable Value"],
+  
 };
 const clean = (s:string) => s.trim().toLowerCase().replace(/[^a-z0-9]/g, "");
 const txt = (v:Cell) => v == null ? "" : String(v).trim();
@@ -81,15 +81,14 @@ export default function ExcelPreview({onUploaded}:{onUploaded?:()=>void}) {
       const records:UploadRow[]=[];
       const preview:PreviewRow[]=[];
       const warnings:{row:number;message:string}[]=[];
-      let qty=0,sales=0,listValue=0;
+      let qty=0,sales=0;
       rows.forEach((r,i)=>{
         const date=dateValue(value(r,"date"));
         const q=numeric(value(r,"qty"));
         const a=numeric(value(r,"amount"));
-        const l=numeric(value(r,"listValue"));
         const problems:string[]=[];
         if (txt(value(r,"date")) && !date) problems.push("Date વાંચી શકાઈ નથી");
-        for (const [key,label] of [["qty","Qty"],["amount","Amt"],["listValue","List Value"]]) {
+        for (const [key,label] of [["qty","Qty"],["amount","Taxable"]]) {
           if (txt(value(r,key)) && numeric(value(r,key))===null) problems.push(`${label} નંબર નથી`);
         }
         if (problems.length) warnings.push({row:i+2,message:problems.join(", ")});
@@ -102,13 +101,13 @@ export default function ExcelPreview({onUploaded}:{onUploaded?:()=>void}) {
           company_name:txt(value(r,"company")), sm_name:txt(value(r,"sm")),
           order_no:txt(value(r,"order")), area:txt(value(r,"area")),
           city:txt(value(r,"city")), pin_code:txt(value(r,"pin")),
-          quantity:q, sales_amount:a, list_value:l,
+          quantity:q, sales_amount:a,
           original_data:{...original,__excel_row:i+2}
         });
-        qty+=q??0;sales+=a??0;listValue+=l??0;
+        qty+=q??0;sales+=a??0;
         if (preview.length<20) preview.push({row:i+2,date:date??txt(value(r,"date")),party:txt(value(r,"party")),code:txt(value(r,"code")),qty:txt(value(r,"qty")),amount:txt(value(r,"amount")),warnings:problems});
       });
-      setData({file:file.name,sheet,total:rows.length,qty,sales,listValue,headers,warnings,preview,records,hash});
+      setData({file:file.name,sheet,total:rows.length,qty,sales,headers,warnings,preview,records,hash});
     } catch(e) {setMessage(e instanceof Error?e.message:"Excel વાંચવામાં Error આવ્યો.");}
     finally {setBusy(false);}
   }
@@ -136,11 +135,11 @@ export default function ExcelPreview({onUploaded}:{onUploaded?:()=>void}) {
     {success&&<p role="status" style={{color:"#177245"}}><CheckCircle2 size={17}/> {success}</p>}
     {data&&<>
       <p><strong>File:</strong> {data.file} | <strong>Sheet:</strong> {data.sheet}</p>
-      <div style={{display:"flex",flexWrap:"wrap",gap:14}}><strong>Rows: {fmt(data.total)}</strong><strong>Qty: {fmt(data.qty)}</strong><strong>Sales: ₹{fmt(data.sales)}</strong><strong>List Value: ₹{fmt(data.listValue)}</strong></div>
+      <div style={{display:"flex",flexWrap:"wrap",gap:14}}><strong>Rows: {fmt(data.total)}</strong><strong>Qty: {fmt(data.qty)}</strong><strong>Taxable Sales: ₹{fmt(data.sales)}</strong></div>
       <p style={{color:"#666",fontSize:13}}>Excel Columns: {data.headers.join(" | ")}</p>
-      {data.warnings.length>0&&<div style={{background:"#fff7e6",padding:12,borderRadius:9}}><p><AlertTriangle size={16}/> {data.warnings.length} Rows માં Date/Number વાંચવાની ચેતવણી છે. Rows Skip નહીં થાય; મૂળ Values original_data માં રહેશે. પરંતુ વાંચી ન શકાય તેવા Amount/Qty Dashboard ના Total માં ગણાશે નહીં. Upload પહેલાં Excel સુધારવું વધુ સારું.</p>{data.warnings.slice(0,20).map(w=><p key={w.row} style={{fontSize:12}}>Row {w.row}: {w.message}</p>)}</div>}
+      {data.warnings.length>0&&<div style={{background:"#fff7e6",padding:12,borderRadius:9}}><p><AlertTriangle size={16}/> {data.warnings.length} Rows માં Date/Number વાંચવાની ચેતવણી છે. Rows Skip નહીં થાય; મૂળ Values original_data માં રહેશે. પરંતુ વાંચી ન શકાય તેવા Taxable/Qty Dashboard ના Total માં ગણાશે નહીં. Upload પહેલાં Excel સુધારવું વધુ સારું.</p>{data.warnings.slice(0,20).map(w=><p key={w.row} style={{fontSize:12}}>Row {w.row}: {w.message}</p>)}</div>}
       <h3>First 20 Rows Preview</h3>
-      <div style={{overflowX:"auto"}}><table style={{borderCollapse:"collapse",width:"100%",fontSize:12}}><thead><tr>{["Row","Date","Party","Product Code","Qty","Amt","Warnings"].map(h=><th key={h} style={{padding:8,textAlign:"left",borderBottom:"1px solid #ddd"}}>{h}</th>)}</tr></thead><tbody>{data.preview.map(r=><tr key={r.row}>{[r.row,r.date,r.party,r.code,r.qty,r.amount,r.warnings.join(", ")||"OK"].map((v,i)=><td key={i} style={{padding:8,borderBottom:"1px solid #eee"}}>{v}</td>)}</tr>)}</tbody></table></div>
+      <div style={{overflowX:"auto"}}><table style={{borderCollapse:"collapse",width:"100%",fontSize:12}}><thead><tr>{["Row","Date","Party","Product Code","Qty","Taxable","Warnings"].map(h=><th key={h} style={{padding:8,textAlign:"left",borderBottom:"1px solid #ddd"}}>{h}</th>)}</tr></thead><tbody>{data.preview.map(r=><tr key={r.row}>{[r.row,r.date,r.party,r.code,r.qty,r.amount,r.warnings.join(", ")||"OK"].map((v,i)=><td key={i} style={{padding:8,borderBottom:"1px solid #eee"}}>{v}</td>)}</tr>)}</tbody></table></div>
       <button type="button" onClick={save} disabled={saving||busy||!data.total} style={{marginTop:18,display:"inline-flex",gap:8,alignItems:"center",padding:"12px 18px",border:0,borderRadius:9,background:"#7048e8",color:"white",fontWeight:700,cursor:"pointer"}}><UploadCloud size={18}/>{saving?"Saving all rows...":`Save All ${fmt(data.total)} Rows to Supabase`}</button>
     </>}
   </section>;
