@@ -3,6 +3,7 @@ import { LayoutDashboard, BarChart3, Upload, Settings, Package, Users, IndianRup
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { downloadSalesTemplate } from "./salesTemplate";
 import ExcelPreview from "./ExcelPreview";
+import SalesDataManager from "./SalesDataManager";
 import { supabase, isSupabaseConfigured } from "./supabase";
 import type { Session } from "@supabase/supabase-js";
 
@@ -60,6 +61,7 @@ export default function App() {
   const [authError, setAuthError] = useState("");
   const [signingIn, setSigningIn] = useState(false);
   const [sales, setSales] = useState<Sale[]>([]);
+  const [refreshKey, setRefreshKey] = useState(0);
   const [loading, setLoading] = useState(false);
   const [dataError, setDataError] = useState("");
   const [page,setPage] = useState<Page>("dashboard");
@@ -109,7 +111,7 @@ export default function App() {
     };
     void load();
     return () => { cancelled = true; };
-  }, [session?.user.id]);
+  }, [session?.user.id, refreshKey]);
 
   const login = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -168,8 +170,8 @@ export default function App() {
         <section className="panel"><h2>Analysis View</h2><p>Choose a category to see the detailed report.</p><div className="analysis-grid">{(["customer","company","product","sm","area","city"] as const).map(key=><button key={key} type="button" className="analysis-item" onClick={()=>{setAnalysisKey(key);setPage("analysis")}} style={{cursor:"pointer",border:"1px solid #eee8fa",background:"#faf8ff"}}><BarChart3 size={19}/>{key.toUpperCase()} Wise</button>)}</div></section>
       </>}
       {page==="analysis"&&<section className="panel"><h2>Sales Analysis</h2><p>All figures follow sidebar filters. Budget and target comparisons will be added when those files are available.</p><div style={{display:"flex",gap:8,flexWrap:"wrap",margin:"16px 0"}}>{(["customer","company","product","sm","area","city"] as const).map(key=><button key={key} type="button" onClick={()=>setAnalysisKey(key)} style={{...buttonStyle,background:analysisKey===key?"#7048e8":"#f0eafa",color:analysisKey===key?"white":"#6044ac"}}>{key.toUpperCase()} Wise</button>)}</div><div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:13}}><thead><tr>{[analysisKey.toUpperCase(),"Qty","Sales","List Value","Customers","Part Numbers"].map(h=><th key={h} style={{textAlign:"left",padding:12,borderBottom:"2px solid #eee8fa"}}>{h}</th>)}</tr></thead><tbody>{grouped.map(r=><tr key={r.name}>{[r.name,formatNumber(r.qty),formatMoney(r.sales),formatMoney(r.listValue),r.customers,r.parts].map((v,i)=><td key={i} style={{padding:12,borderBottom:"1px solid #f0edf6"}}>{v}</td>)}</tr>)}{grouped.length===0&&<tr><td colSpan={6} style={{padding:20}}>No matching records.</td></tr>}</tbody></table></div></section>}
-      {page==="upload"&&<><section className="panel"><h2>Sales Data Upload</h2><p>Download the standard sample Excel with Qty, Amt and List Value columns.</p><button type="button" onClick={downloadSalesTemplate} style={{...buttonStyle,display:"inline-flex",alignItems:"center",gap:8,marginTop:12}}><Download size={17}/> Download Sample Sales Excel</button></section><ExcelPreview/><section className="panel"><h2>Database</h2><div className="analysis-grid"><div className="analysis-item"><Database size={20}/> Supabase Database (connected — read only)</div><div className="analysis-item"><FileSpreadsheet size={20}/> Original Excel Columns</div><div className="analysis-item"><Package size={20}/> List Value Supported</div></div></section></>}
-      {page==="admin"&&<section className="panel"><h2>Admin Panel</h2><p>Login is active. User roles, admin-only uploads and upload history will be added next.</p><div className="placeholder">Signed in: {session.user.email}</div></section>}
+      {page==="upload"&&<><section className="panel"><h2>Sales Data Upload</h2><p>Download the standard sample Excel with Qty, Amt and List Value columns.</p><button type="button" onClick={downloadSalesTemplate} style={{...buttonStyle,display:"inline-flex",alignItems:"center",gap:8,marginTop:12}}><Download size={17}/> Download Sample Sales Excel</button></section><ExcelPreview onUploaded={()=>setRefreshKey(v=>v+1)}/><section className="panel"><h2>Database</h2><div className="analysis-grid"><div className="analysis-item"><Database size={20}/> Supabase Database (connected — read only)</div><div className="analysis-item"><FileSpreadsheet size={20}/> Original Excel Columns</div><div className="analysis-item"><Package size={20}/> List Value Supported</div></div></section></>}
+      {page==="admin"&&<><section className="panel"><h2>Admin Panel</h2><p>Signed in: {session.user.email}</p><p>User management will be added after sales testing.</p></section><SalesDataManager email={session.user.email} onDeleted={()=>setRefreshKey(v=>v+1)}/></>}
     </main>
   </div>;
 }
