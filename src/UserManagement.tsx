@@ -15,9 +15,6 @@ export default function UserManagement({ email }: { email?: string }) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newAdminPassword, setNewAdminPassword] = useState("");
-  const [confirmAdminPassword, setConfirmAdminPassword] = useState("");
   const [selectedUser, setSelectedUser] = useState<UserItem | null>(null);
   const [userPassword, setUserPassword] = useState("");
 
@@ -48,23 +45,17 @@ export default function UserManagement({ email }: { email?: string }) {
     } catch (e) { setError(e instanceof Error ? e.message : "Unable to create user"); }
     finally { setBusy(false); }
   };
-  const changeOwnPassword = async (e: FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    if (!supabase || !email || busy) return;
-    if (newAdminPassword.length < 12 || newAdminPassword.length > 128 || newAdminPassword !== confirmAdminPassword) {
-      setError("New password must be 12–128 characters and both entries must match."); return;
-    }
+  const sendAdminResetEmail = async () => {
+    if (!supabase || !isAdmin || busy) return;
     setBusy(true); setError(""); setMessage("");
     try {
-      // Verify current password before allowing the change.
-      const { error: verifyError } = await supabase.auth.signInWithPassword({ email, password: currentPassword });
-      if (verifyError) throw new Error("Current admin password is incorrect.");
-      const { error: updateError } = await supabase.auth.updateUser({ password: newAdminPassword });
-      if (updateError) throw updateError;
-      setCurrentPassword(""); setNewAdminPassword(""); setConfirmAdminPassword("");
-      setMessage("Admin password updated successfully.");
-    } catch (e) { setError(e instanceof Error ? e.message : "Unable to change password"); }
-    finally { setBusy(false); }
+      const redirectTo = `${window.location.origin}${window.location.pathname}`;
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(ADMIN_EMAIL, { redirectTo });
+      if (resetError) throw resetError;
+      setMessage("Password reset email requested. Check your admin email inbox and spam folder.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Unable to send reset email");
+    } finally { setBusy(false); }
   };
   const changeUserPassword = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -96,13 +87,11 @@ export default function UserManagement({ email }: { email?: string }) {
     {error && <p role="alert" style={{ color: "#b42318" }}>{error}</p>}
     {message && <p role="status" style={{ color: "#177245" }}>{message}</p>}
 
-    <h3>Change Admin Password</h3>
-    <form onSubmit={changeOwnPassword} style={{ display: "grid", gap: 10, maxWidth: 460 }}>
-      <label>Current Password<input style={inputStyle} type="password" autoComplete="current-password" required value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} /></label>
-      <label>New Password (minimum 12 characters)<input style={inputStyle} type="password" autoComplete="new-password" required minLength={12} maxLength={128} value={newAdminPassword} onChange={e => setNewAdminPassword(e.target.value)} /></label>
-      <label>Confirm New Password<input style={inputStyle} type="password" autoComplete="new-password" required value={confirmAdminPassword} onChange={e => setConfirmAdminPassword(e.target.value)} /></label>
-      <button disabled={busy} style={buttonStyle}>Change Admin Password</button>
-    </form>
+    <h3>Reset Admin Password by Email</h3>
+    <p>Old password is not required. A reset link will be sent to your admin email.</p>
+    <button type="button" disabled={busy} onClick={() => void sendAdminResetEmail()} style={buttonStyle}>
+      {busy ? "Please wait..." : "Send Password Reset Email"}
+    </button>
 
     <h3 style={{ marginTop: 28 }}>Create Viewer</h3>
     <form onSubmit={create} style={{ display: "grid", gap: 12, maxWidth: 460 }}>
