@@ -17,6 +17,10 @@ export default function UserManagement({ email }: { email?: string }) {
   const [error, setError] = useState("");
   const [selectedUser, setSelectedUser] = useState<UserItem | null>(null);
   const [userPassword, setUserPassword] = useState("");
+  const [confirmUserPassword, setConfirmUserPassword] = useState("");
+  const [adminPassword, setAdminPassword] = useState("");
+  const [confirmAdminPassword, setConfirmAdminPassword] = useState("");
+  const [showAdminPassword, setShowAdminPassword] = useState(false);
 
   const call = async (payload: Record<string, unknown>) => {
     if (!supabase) throw new Error("Supabase not configured");
@@ -45,28 +49,38 @@ export default function UserManagement({ email }: { email?: string }) {
     } catch (e) { setError(e instanceof Error ? e.message : "Unable to create user"); }
     finally { setBusy(false); }
   };
-  const sendAdminResetEmail = async () => {
+  const changeAdminPassword = async (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
     if (!supabase || !isAdmin || busy) return;
+    if (adminPassword.length < 12 || adminPassword.length > 128) {
+      setError("Admin password must be 12–128 characters."); return;
+    }
+    if (adminPassword !== confirmAdminPassword) {
+      setError("New Password and Confirm Password do not match."); return;
+    }
+    if (!window.confirm("Change your Admin password? You will need to log in again.")) return;
     setBusy(true); setError(""); setMessage("");
     try {
-      const redirectTo = `${window.location.origin}${window.location.pathname}`;
-      const { error: resetError } = await supabase.auth.resetPasswordForEmail(ADMIN_EMAIL, { redirectTo });
-      if (resetError) throw resetError;
-      setMessage("Password reset email requested. Check your admin email inbox and spam folder.");
+      const { error: updateError } = await supabase.auth.updateUser({ password: adminPassword });
+      if (updateError) throw updateError;
+      setAdminPassword(""); setConfirmAdminPassword(""); setShowAdminPassword(false);
+      window.alert("Admin password changed successfully. Please log in again with your new password.");
+      await supabase.auth.signOut();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Unable to send reset email");
+      setError(e instanceof Error ? e.message : "Unable to change Admin password");
     } finally { setBusy(false); }
   };
   const changeUserPassword = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (!selectedUser || busy) return;
     if (userPassword.length < 12 || userPassword.length > 128) { setError("Password must be 12–128 characters."); return; }
+    if (userPassword !== confirmUserPassword) { setError("New Password and Confirm Password do not match."); return; }
     if (!window.confirm(`Change password for ${selectedUser.email}?`)) return;
     setBusy(true); setError(""); setMessage("");
     try {
       await call({ action: "reset_password", user_id: selectedUser.id, password: userPassword });
       setMessage(`Password updated for ${selectedUser.email}. Share it privately.`);
-      setSelectedUser(null); setUserPassword("");
+      setSelectedUser(null); setUserPassword(""); setConfirmUserPassword("");
     } catch (e) { setError(e instanceof Error ? e.message : "Unable to reset user password"); }
     finally { setBusy(false); }
   };
@@ -87,11 +101,29 @@ export default function UserManagement({ email }: { email?: string }) {
     {error && <p role="alert" style={{ color: "#b42318" }}>{error}</p>}
     {message && <p role="status" style={{ color: "#177245" }}>{message}</p>}
 
-    <h3>Reset Admin Password by Email</h3>
-    <p>Old password is not required. A reset link will be sent to your admin email.</p>
-    <button type="button" disabled={busy} onClick={() => void sendAdminResetEmail()} style={buttonStyle}>
-      {busy ? "Please wait..." : "Send Password Reset Email"}
-    </button>
+    <h3>Admin Password</h3>
+    <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+      <strong>{ADMIN_EMAIL}</strong>
+      <button type="button" disabled={busy} onClick={() => { setShowAdminPassword(v => !v); setError(""); }}>
+        {showAdminPassword ? "Cancel" : "Change Admin Password"}
+      </button>
+    </div>
+    {showAdminPassword && <form onSubmit={changeAdminPassword}
+      style={{ marginTop: 12, padding: 16, border: "1px solid #ddd", borderRadius: 8, maxWidth: 460, display: "grid", gap: 12 }}>
+      <p style={{ margin: 0 }}>Enter a new password. Old password is not requested.</p>
+      <label>New Admin Password
+        <input style={inputStyle} type="password" required minLength={12} maxLength={128}
+          autoComplete="new-password" value={adminPassword} onChange={e => setAdminPassword(e.target.value)} />
+      </label>
+      <label>Confirm New Admin Password
+        <input style={inputStyle} type="password" required minLength={12} maxLength={128}
+          autoComplete="new-password" value={confirmAdminPassword} onChange={e => setConfirmAdminPassword(e.target.value)} />
+      </label>
+      <button type="submit" disabled={busy} style={buttonStyle}>
+        {busy ? "Saving..." : "Save Admin Password"}
+      </button>
+      <small>Supabase may require recent login or extra verification for sensitive password changes.</small>
+    </form>}
 
     <h3 style={{ marginTop: 28 }}>Create Viewer</h3>
     <form onSubmit={create} style={{ display: "grid", gap: 12, maxWidth: 460 }}>
@@ -110,7 +142,7 @@ export default function UserManagement({ email }: { email?: string }) {
         <td style={{ padding: 9 }}>{u.active ? "Active" : "Deactive"}</td>
         <td style={{ padding: 9 }}>{new Date(u.created_at).toLocaleDateString("en-IN")}</td>
         <td style={{ padding: 9, whiteSpace: "nowrap" }}>
-          <button type="button" disabled={busy} onClick={() => { setSelectedUser(u); setUserPassword(""); setError(""); }}>Change Password</button>{" "}
+          <button type="button" disabled={busy} onClick={() => { setSelectedUser(u); setUserPassword(""); setConfirmUserPassword(""); setError(""); }}>Change Password</button>{" "}
           <button type="button" disabled={busy} onClick={() => void toggleUser(u)}>{u.active ? "Deactivate" : "Activate"}</button>
         </td>
       </tr>)}</tbody>
@@ -118,7 +150,8 @@ export default function UserManagement({ email }: { email?: string }) {
     {selectedUser && <form onSubmit={changeUserPassword} style={{ marginTop: 18, padding: 16, border: "1px solid #ddd", borderRadius: 8, maxWidth: 460 }}>
       <h3>Change Password: {selectedUser.email}</h3>
       <label>New Password<input style={inputStyle} type="password" required minLength={12} maxLength={128} autoComplete="new-password" value={userPassword} onChange={e => setUserPassword(e.target.value)} /></label>
-      <div style={{ display: "flex", gap: 10, marginTop: 12 }}><button type="submit" disabled={busy} style={buttonStyle}>Save New Password</button><button type="button" onClick={() => { setSelectedUser(null); setUserPassword(""); }}>Cancel</button></div>
+      <label>Confirm New Password<input style={inputStyle} type="password" required minLength={12} maxLength={128} autoComplete="new-password" value={confirmUserPassword} onChange={e => setConfirmUserPassword(e.target.value)} /></label>
+      <div style={{ display: "flex", gap: 10, marginTop: 12 }}><button type="submit" disabled={busy} style={buttonStyle}>Save New Password</button><button type="button" onClick={() => { setSelectedUser(null); setUserPassword(""); setConfirmUserPassword(""); }}>Cancel</button></div>
     </form>}
     <p style={{ fontSize: 12, color: "#666" }}>Deactivated users cannot sign in. Apply the included SQL security policy to block existing sessions from reading sales data.</p>
   </section>;
